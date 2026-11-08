@@ -10,6 +10,7 @@ import {
   computeExactPixSplitCents,
   getDiscountPercent,
 } from "../_shared/campaign.ts";
+import { todayInBrasilia } from "../_shared/time.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -251,7 +252,7 @@ Deno.serve(async (req) => {
       }
 
       if (customerId) {
-        const dueDate = new Date().toISOString().slice(0, 10);
+        const dueDate = todayInBrasilia();
         const createPixPayment = (splitCents: number) =>
           fetch(`${asaasBaseUrl}/payments`, {
             method: "POST",

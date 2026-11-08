@@ -4,6 +4,8 @@
 // exibido; qualquer valor cobrado é sempre recalculado aqui, no servidor.
 // ============================================================================
 
+import { todayInBrasilia } from "./time.ts";
+
 export interface CampaignTier {
   /** Quantidade EXATA de aulas no pedido */
   items: number;
@@ -24,7 +26,8 @@ export interface CampaignConfig {
 
 export const CAMPAIGN: CampaignConfig = {
   id: "pacotes-2026",
-  active: true,
+  // Desativada em 08/11/2026 — uma nova campanha vai substituir esta.
+  active: false,
   startDate: "2026-08-03",
   endDate: null,
   tiers: [
@@ -131,10 +134,10 @@ export function buildChargeDescription(
   return compact.slice(0, ASAAS_DESCRIPTION_MAX);
 }
 
-/** A campanha está valendo nesta data? */
+/** A campanha está valendo nesta data? (datas comparadas no horário de Brasília) */
 export function isCampaignActive(today = new Date()): boolean {
   if (!CAMPAIGN.active) return false;
-  const iso = today.toISOString().slice(0, 10);
+  const iso = todayInBrasilia(today);
   if (CAMPAIGN.startDate && iso < CAMPAIGN.startDate) return false;
   if (CAMPAIGN.endDate && iso > CAMPAIGN.endDate) return false;
   return true;

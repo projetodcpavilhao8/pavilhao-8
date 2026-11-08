@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { todayInBrasilia } from "../_shared/time.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -66,12 +67,11 @@ Deno.serve(async (req) => {
     const { data: classes } = await supabase.from("classes").select("id, title, time").in("id", classIds);
     const classMap = new Map((classes || []).map((c) => [c.id, c]));
 
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const today = todayInBrasilia();
     const reservations = (resData || [])
       .filter((r) => {
         if (!r.class_date) return true;
-        const d = new Date(`${r.class_date}T12:00:00`);
-        const isPast = d < today;
+        const isPast = r.class_date < today;
         if (isPast && r.status === "pending") return false;
         return true;
       })

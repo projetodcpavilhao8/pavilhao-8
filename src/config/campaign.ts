@@ -4,6 +4,8 @@
 // é sempre recalculado no servidor. Ao mudar a campanha, altere os dois.
 // ============================================================================
 
+import { todayInBrasilia } from "@/lib/date";
+
 export interface CampaignTier {
   items: number;
   percent: number;
@@ -11,7 +13,8 @@ export interface CampaignTier {
 
 export const CAMPAIGN = {
   id: "pacotes-2026",
-  active: true,
+  // Desativada em 08/11/2026 — uma nova campanha vai substituir esta.
+  active: false,
   startDate: "2026-08-03" as string | null,
   endDate: null as string | null,
   tiers: [
@@ -24,9 +27,10 @@ export const CAMPAIGN = {
 export const DEFAULT_PRICE_CENTS = 2990;
 export const MAX_ITEMS_PER_ORDER = 10;
 
+/** Datas de início/fim comparadas com o dia de hoje em Brasília. */
 export function isCampaignActive(today = new Date()): boolean {
   if (!CAMPAIGN.active) return false;
-  const iso = today.toISOString().slice(0, 10);
+  const iso = todayInBrasilia(today);
   if (CAMPAIGN.startDate && iso < CAMPAIGN.startDate) return false;
   if (CAMPAIGN.endDate && iso > CAMPAIGN.endDate) return false;
   return true;
