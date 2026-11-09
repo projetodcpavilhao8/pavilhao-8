@@ -21,7 +21,7 @@ export function printReservations(rows: Reservation[], filtersLabel: string) {
       h1 { font-size: 20px; margin-bottom: 4px; }
       .subtitle { color: #666; font-size: 13px; margin-bottom: 16px; }
       table { width: 100%; border-collapse: collapse; font-size: 13px; }
-      th { text-align: left; padding: 8px 10px; background: #f5c518; color: #000; font-weight: 600; }
+      th { text-align: left; padding: 8px 10px; background: #ff1493; color: #fff; font-weight: 600; }
       td { padding: 6px 10px; border-bottom: 1px solid #333; }
       .summary { margin-top: 16px; font-size: 13px; color: #555; }
       @media print { body { margin: 15px; } }

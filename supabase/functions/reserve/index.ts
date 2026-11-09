@@ -8,7 +8,8 @@ import {
   buildChargeDescription,
   computeCardSplitCents,
   computeExactPixSplitCents,
-  getDiscountPercent,
+  getCampaignTier,
+  tierLabel,
 } from "../_shared/campaign.ts";
 import { todayInBrasilia } from "../_shared/time.ts";
 
@@ -145,15 +146,18 @@ Deno.serve(async (req) => {
     // ===== Pedido (atômico) =====
     // A RPC valida TODAS as vagas sob lock, cria o pedido e as reservas numa
     // única transação. Qualquer horário indisponível => nada é criado.
-    const discountPercent = getDiscountPercent(items.length);
+    // A promoção é decidida aqui, no instante do pedido (horário do servidor),
+    // e o preço travado no pedido vale até o fim da janela de pagamento.
+    const tier = getCampaignTier(items.length);
 
     const { data: orderData, error: orderError } = await supabase.rpc("create_booking_order", {
       p_user_id: userId,
       p_items: items.map((it) => ({ class_id: it.class_id, class_date: it.class_date })),
       p_campaign_id: CAMPAIGN.id,
-      p_discount_percent: discountPercent,
+      p_discount_percent: tier?.totalCents == null ? (tier?.percent ?? 0) : 0,
       p_ttl_minutes: ORDER_TTL_MINUTES,
       p_default_price: DEFAULT_PRICE_CENTS,
+      p_fixed_total_cents: tier?.totalCents ?? null,
     });
 
     if (orderError) {
@@ -200,7 +204,7 @@ Deno.serve(async (req) => {
     const chargeDescription = buildChargeDescription(schedule, {
       customerName: normalizedName,
       itemsCount: order.items_count,
-      discountPercent: order.discount_percent,
+      promoLabel: tier && order.discount_cents > 0 ? tierLabel(tier) : undefined,
     });
 
     // ===== Cobrança Asaas =====
@@ -405,7 +409,7 @@ Deno.serve(async (req) => {
       discount_percent: order.discount_percent,
       discount_cents: order.discount_cents,
       total_cents: totalCents,
-      campaign_applied: order.discount_percent > 0,
+      campaign_applied: order.discount_cents > 0,
     });
   } catch (error: unknown) {
     console.error("Reserve error:", error);

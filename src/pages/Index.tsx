@@ -2,6 +2,7 @@ import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import TrainingCards from "@/components/TrainingCards";
+import PromoCard from "@/components/PromoCard";
 import ScheduleModal from "@/components/ScheduleModal";
 import AboutSection from "@/components/AboutSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
@@ -24,6 +25,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <Navbar onScheduleClick={() => openSchedule()} onConsultClick={() => setConsultOpen(true)} />
       <HeroSection onScheduleClick={() => openSchedule()} />
+      <PromoCard onScheduleClick={() => openSchedule()} />
       <TrainingCards onScheduleClick={openSchedule} />
       <AboutSection />
       <TestimonialsSection />

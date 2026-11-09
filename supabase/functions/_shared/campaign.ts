@@ -4,37 +4,39 @@
 // exibido; qualquer valor cobrado é sempre recalculado aqui, no servidor.
 // ============================================================================
 
-import { todayInBrasilia } from "./time.ts";
-
 export interface CampaignTier {
   /** Quantidade EXATA de aulas no pedido */
   items: number;
-  /** Percentual de desconto sobre o subtotal */
-  percent: number;
+  /** Desconto percentual sobre o subtotal… */
+  percent?: number;
+  /** …ou preço fechado do pacote, em centavos (tem prioridade sobre percent) */
+  totalCents?: number;
 }
 
 export interface CampaignConfig {
   id: string;
+  /** Nome curto, usado na descrição da cobrança */
+  name: string;
   active: boolean;
-  /** Início (inclusive), formato YYYY-MM-DD. null = sem data inicial */
-  startDate: string | null;
-  /** Fim (inclusive), formato YYYY-MM-DD. null = sem data final */
-  endDate: string | null;
+  /**
+   * Início (inclusive) e fim (exclusivo) como instante exato, sempre com o
+   * fuso de Brasília explícito (-03:00). null = sem limite.
+   */
+  startsAt: string | null;
+  endsAt: string | null;
   /** Desconto só se a quantidade bater EXATAMENTE com um tier */
   tiers: CampaignTier[];
 }
 
+// Histórico: "pacotes-2026" (3/5/10 aulas com 5/10/15% OFF) rodou de
+// 03/08/2026 a 08/11/2026.
 export const CAMPAIGN: CampaignConfig = {
-  id: "pacotes-2026",
-  // Desativada em 08/11/2026 — uma nova campanha vai substituir esta.
-  active: false,
-  startDate: "2026-08-03",
-  endDate: null,
-  tiers: [
-    { items: 3, percent: 5 },
-    { items: 5, percent: 10 },
-    { items: 10, percent: 15 },
-  ],
+  id: "black-friday-spinning-2026",
+  name: "Black Friday",
+  active: true,
+  startsAt: "2026-11-09T05:00:00-03:00", // segunda 09/11, 5h
+  endsAt: "2026-11-14T00:00:00-03:00",   // fim do dia 13/11 (meia-noite)
+  tiers: [{ items: 4, totalCents: 9900 }], // 4 aulas por R$ 99,00
 };
 
 /** Preço padrão por aula quando a turma não tem preço próprio cadastrado. */
@@ -110,13 +112,11 @@ export const ASAAS_DESCRIPTION_MAX = 150;
  */
 export function buildChargeDescription(
   schedule: string[],
-  opts: { customerName?: string; itemsCount: number; discountPercent?: number } = { itemsCount: 0 },
+  opts: { customerName?: string; itemsCount: number; promoLabel?: string } = { itemsCount: 0 },
 ): string {
   const prefix = "Reserva Pavilhão 8";
   const who = opts.customerName ? ` — ${opts.customerName}` : "";
-  const off = opts.discountPercent && opts.discountPercent > 0
-    ? ` (${opts.itemsCount} aulas — ${opts.discountPercent}% OFF)`
-    : "";
+  const off = opts.promoLabel ? ` (${opts.promoLabel})` : "";
 
   const full = `${prefix}${who}${schedule.length ? ` — ${schedule.join(", ")}` : ""}${off}`;
   if (full.length <= ASAAS_DESCRIPTION_MAX) return full;
@@ -134,29 +134,43 @@ export function buildChargeDescription(
   return compact.slice(0, ASAAS_DESCRIPTION_MAX);
 }
 
-/** A campanha está valendo nesta data? (datas comparadas no horário de Brasília) */
-export function isCampaignActive(today = new Date()): boolean {
+/** A campanha está valendo neste instante? (início inclusive, fim exclusivo) */
+export function isCampaignActive(now = new Date()): boolean {
   if (!CAMPAIGN.active) return false;
-  const iso = todayInBrasilia(today);
-  if (CAMPAIGN.startDate && iso < CAMPAIGN.startDate) return false;
-  if (CAMPAIGN.endDate && iso > CAMPAIGN.endDate) return false;
+  const t = now.getTime();
+  if (CAMPAIGN.startsAt && t < Date.parse(CAMPAIGN.startsAt)) return false;
+  if (CAMPAIGN.endsAt && t >= Date.parse(CAMPAIGN.endsAt)) return false;
   return true;
 }
 
 /**
- * Percentual de desconto para uma quantidade de aulas.
- * Só há desconto em quantidades EXATAS configuradas (3, 5, 10) — 4, 6, 7, 8, 9
- * seguem com preço cheio.
+ * Tier que vale para essa quantidade de aulas, ou null.
+ * Só há promoção em quantidades EXATAS configuradas.
  */
-export function getDiscountPercent(itemsCount: number, today = new Date()): number {
-  if (!isCampaignActive(today)) return 0;
-  const tier = CAMPAIGN.tiers.find((t) => t.items === itemsCount);
-  return tier ? tier.percent : 0;
+export function getCampaignTier(itemsCount: number, now = new Date()): CampaignTier | null {
+  if (!isCampaignActive(now)) return null;
+  return CAMPAIGN.tiers.find((t) => t.items === itemsCount) ?? null;
+}
+
+/** Desconto em centavos que um tier dá sobre um subtotal (nunca negativo). */
+export function tierDiscountCents(tier: CampaignTier, subtotalCents: number): number {
+  if (tier.totalCents != null) return Math.max(0, subtotalCents - tier.totalCents);
+  if (tier.percent && tier.percent > 0) return Math.trunc((subtotalCents * tier.percent) / 100);
+  return 0;
+}
+
+/** "Black Friday 4 aulas R$ 99,00" / "4 aulas 10% OFF" — vai na descrição da cobrança. */
+export function tierLabel(tier: CampaignTier): string {
+  if (tier.totalCents != null) {
+    return `${CAMPAIGN.name} ${tier.items} aulas R$ ${(tier.totalCents / 100).toFixed(2).replace(".", ",")}`;
+  }
+  return `${CAMPAIGN.name} ${tier.items} aulas ${tier.percent}% OFF`;
 }
 
 export interface PriceBreakdown {
   itemsCount: number;
   subtotalCents: number;
+  /** Percentual equivalente, só informativo (arredondado) */
   discountPercent: number;
   discountCents: number;
   totalCents: number;
@@ -165,25 +179,22 @@ export interface PriceBreakdown {
 
 /**
  * Cálculo do pedido — SOMENTE aritmética inteira em centavos.
- * O desconto é truncado (nunca arredondado pra cima), então o cliente jamais
- * paga a mais por causa de arredondamento.
+ * Espelha a RPC create_booking_order, que é quem grava o valor de verdade.
  */
 export function computeOrderPrice(
   itemPricesCents: number[],
-  today = new Date(),
+  now = new Date(),
 ): PriceBreakdown {
   const itemsCount = itemPricesCents.length;
   const subtotalCents = itemPricesCents.reduce((a, b) => a + b, 0);
-  const discountPercent = getDiscountPercent(itemsCount, today);
-  const discountCents = discountPercent > 0
-    ? Math.trunc((subtotalCents * discountPercent) / 100)
-    : 0;
+  const tier = getCampaignTier(itemsCount, now);
+  const discountCents = tier ? tierDiscountCents(tier, subtotalCents) : 0;
   return {
     itemsCount,
     subtotalCents,
-    discountPercent,
+    discountPercent: discountCents > 0 ? Math.round((discountCents * 100) / subtotalCents) : 0,
     discountCents,
     totalCents: subtotalCents - discountCents,
-    campaignId: discountPercent > 0 ? CAMPAIGN.id : null,
+    campaignId: discountCents > 0 ? CAMPAIGN.id : null,
   };
 }

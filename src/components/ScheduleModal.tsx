@@ -10,10 +10,13 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_PRICE_CENTS as REGULAR_PRICE_CENTS,
   MAX_ITEMS_PER_ORDER,
+  CAMPAIGN,
+  campaignPeriod,
+  campaignCartHint,
   computeOrderPrice,
-  getNextTier,
+  getCampaignTier,
   isCampaignActive,
-  tiersLabel,
+  tierOfferText,
 } from "@/config/campaign";
 
 const DAY_NAMES = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -181,8 +184,12 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
     () => computeOrderPrice(cart.map((c) => c.occurrence.template.price || REGULAR_PRICE_CENTS)),
     [cart],
   );
-  const nextTier = useMemo(() => getNextTier(cart.length), [cart.length]);
-  const campaignOn = useMemo(() => isCampaignActive(), []);
+  const cartHint = useMemo(() => campaignCartHint(cart.length), [cart.length]);
+  // Reavalia a cada abertura (o modal pode ficar montado de antes do início).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const campaignOn = useMemo(() => isCampaignActive(), [open]);
+  const appliedTier = priceBreakdown.discountCents > 0 ? getCampaignTier(priceBreakdown.itemsCount) : null;
+  const promoText = appliedTier ? `${CAMPAIGN.name}: ${tierOfferText(appliedTier)}` : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -276,11 +283,13 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
 
         {/* Chamada discreta da campanha */}
         {campaignOn && step === 1 && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/25">
+          <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/40 shadow-neon-sm">
             <Tag className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
             <div className="text-[11px] leading-snug">
-              <p className="font-semibold text-primary">Quanto mais aulas, maior o desconto</p>
-              <p className="text-muted-foreground">{tiersLabel()}</p>
+              <p className="font-bold text-primary uppercase tracking-wide">{CAMPAIGN.name} Spinning P8</p>
+              <p className="text-muted-foreground">
+                Escolha {CAMPAIGN.tiers.map((t) => tierOfferText(t)).join(" ou ")}. Válido para compras até {campaignPeriod().end}.
+              </p>
             </div>
           </div>
         )}
@@ -382,15 +391,13 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                   {/* Mini-resumo flutuante */}
                   {cart.length > 0 && (
                     <div className="sticky bottom-0 -mx-6 px-6 pt-3 pb-1 bg-card border-t border-border">
-                      {priceBreakdown.discountPercent > 0 && (
+                      {promoText && (
                         <p className="text-[11px] font-bold text-primary mb-1">
-                          {priceBreakdown.itemsCount} aulas — {priceBreakdown.discountPercent}% OFF · você economiza {formatBRL(priceBreakdown.discountCents)}
+                          {promoText} · você economiza {formatBRL(priceBreakdown.discountCents)}
                         </p>
                       )}
-                      {priceBreakdown.discountPercent === 0 && nextTier && (
-                        <p className="text-[11px] text-muted-foreground mb-1">
-                          Adicione {nextTier.items - cart.length} aula{nextTier.items - cart.length === 1 ? "" : "s"} e ganhe {nextTier.percent}% OFF
-                        </p>
+                      {!promoText && cartHint && (
+                        <p className="text-[11px] text-primary/90 mb-1">{cartHint}</p>
                       )}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-muted-foreground">
@@ -443,18 +450,14 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 })}
               </div>
 
-              {priceBreakdown.discountPercent > 0 && (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/15 border border-primary">
+              {promoText && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/15 border border-primary shadow-neon-sm">
                   <Tag className="w-4 h-4 text-primary flex-shrink-0" />
-                  <p className="text-xs font-bold text-primary">
-                    {priceBreakdown.itemsCount} aulas — {priceBreakdown.discountPercent}% OFF
-                  </p>
+                  <p className="text-xs font-bold text-primary">{promoText}</p>
                 </div>
               )}
-              {priceBreakdown.discountPercent === 0 && nextTier && (
-                <p className="text-[11px] text-muted-foreground text-center">
-                  Adicione {nextTier.items - cart.length} aula{nextTier.items - cart.length === 1 ? "" : "s"} e ganhe {nextTier.percent}% OFF
-                </p>
+              {!promoText && cartHint && (
+                <p className="text-[11px] text-primary/90 text-center">{cartHint}</p>
               )}
 
               <div className="border-t border-border pt-3 space-y-1">
@@ -466,7 +469,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 </div>
                 {priceBreakdown.discountCents > 0 && (
                   <div className="flex justify-between text-xs text-primary">
-                    <span>Desconto ({priceBreakdown.discountPercent}%)</span>
+                    <span>Desconto {CAMPAIGN.name}</span>
                     <span>− {formatBRL(priceBreakdown.discountCents)}</span>
                   </div>
                 )}
