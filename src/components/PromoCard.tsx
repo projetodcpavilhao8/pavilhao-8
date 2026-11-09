@@ -8,7 +8,6 @@ import {
   campaignPeriod,
   getCampaignPhase,
   timeLeftLabel,
-  type CampaignPhase,
 } from "@/config/campaign";
 
 const brl = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -28,15 +27,16 @@ interface PromoCardProps {
 }
 
 /**
- * Card da campanha (Black Friday Spinning P8). Aparece antes do início como
- * "em breve", fica clicável durante a campanha e some quando ela termina.
+ * Card da campanha (Black Friday Spinning P8). Só aparece enquanto a
+ * campanha está valendo; antes do início e depois do fim, não renderiza nada.
  */
 const PromoCard = ({ onScheduleClick }: PromoCardProps) => {
   const now = useCampaignClock();
-  const phase: CampaignPhase = getCampaignPhase(now);
+  const phase = getCampaignPhase(now);
   const tier = CAMPAIGN.tiers.find((t) => t.totalCents != null);
 
-  if ((phase !== "active" && phase !== "upcoming") || !tier?.totalCents) return null;
+  // Só aparece durante a campanha (a partir de 09/11 às 5h).
+  if (phase !== "active" || !tier?.totalCents) return null;
 
   const period = campaignPeriod();
   const regular = DEFAULT_PRICE_CENTS * tier.items;
@@ -112,24 +112,16 @@ const PromoCard = ({ onScheduleClick }: PromoCardProps) => {
                 <span className="font-bold text-primary">{brl(savings)}</span>
               </p>
 
-              {phase === "active" ? (
-                <>
-                  <Button
-                    size="lg"
-                    onClick={onScheduleClick}
-                    className="mt-5 h-auto w-full whitespace-normal rounded-full bg-gradient-primary px-6 py-4 text-base font-black uppercase sm:w-auto sm:px-8 sm:py-6 sm:text-lg text-primary-foreground animate-pulse-glow transition-transform hover:scale-105 sm:w-auto"
-                  >
-                    Garantir minhas {tier.items} aulas
-                  </Button>
-                  <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5 text-primary" /> Termina em <strong className="text-foreground">{timeLeftLabel(now)}</strong>
-                  </p>
-                </>
-              ) : (
-                <div className="mt-5 rounded-full border border-primary/50 bg-primary/10 px-6 py-3 text-sm font-bold uppercase tracking-wide text-primary">
-                  Começa {period.startWeekday}, {period.start} às {period.startTime}
-                </div>
-              )}
+              <Button
+                size="lg"
+                onClick={onScheduleClick}
+                className="mt-5 h-auto w-full whitespace-normal rounded-full bg-gradient-primary px-6 py-4 text-base font-black uppercase sm:w-auto sm:px-8 sm:py-6 sm:text-lg text-primary-foreground animate-pulse-glow transition-transform hover:scale-105"
+              >
+                Garantir minhas {tier.items} aulas
+              </Button>
+              <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="h-3.5 w-3.5 text-primary" /> Termina em <strong className="text-foreground">{timeLeftLabel(now)}</strong>
+              </p>
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Escolha {tier.items} aulas no agendamento e o desconto entra automaticamente.
               </p>
