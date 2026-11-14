@@ -77,8 +77,8 @@ export default {
           to: { height: "0" },
         },
         "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 20px hsl(328 100% 54% / 0.35)" },
-          "50%": { boxShadow: "0 0 40px hsl(328 100% 54% / 0.7)" },
+          "0%, 100%": { boxShadow: "0 0 20px hsl(var(--neon) / 0.35)" },
+          "50%": { boxShadow: "0 0 40px hsl(var(--neon) / 0.7)" },
         },
       },
       animation: {

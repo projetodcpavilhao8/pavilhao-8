@@ -7,10 +7,12 @@ import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Confirmacao from "./pages/Confirmacao.tsx";
 import MaintenanceScreen, { isUnderMaintenance } from "./components/MaintenanceScreen";
+import { useCampaignTheme } from "./hooks/use-campaign";
 
 const queryClient = new QueryClient();
 
 const App = () => {
+  useCampaignTheme();
   if (isUnderMaintenance()) {
     return <MaintenanceScreen />;
   }

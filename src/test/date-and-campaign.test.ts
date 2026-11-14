@@ -42,9 +42,9 @@ describe.each([
   const DURING = BRT("2026-11-10T12:00:00");
   const four = [2990, 2990, 2990, 2990];
 
-  it("é a única campanha configurada: 4 aulas por R$ 99,00", () => {
-    expect(c.CAMPAIGN.active).toBe(true);
-    expect(c.CAMPAIGN.tiers).toEqual([{ items: 4, totalCents: 9900 }]);
+  it("durante a Black Friday vale só 4 aulas por R$ 99,00", () => {
+    expect(c.getActiveCampaign(DURING)?.id).toBe("black-friday-spinning-2026");
+    expect(c.getActiveCampaign(DURING)?.tiers).toEqual([{ items: 4, totalCents: 9900 }]);
   });
 
   it("começa exatamente às 05:00 de 09/11 (horário de Brasília)", () => {
@@ -53,8 +53,8 @@ describe.each([
   });
 
   it("vale o dia 13/11 inteiro e termina à meia-noite", () => {
-    expect(c.isCampaignActive(BRT("2026-11-13T23:59:59"))).toBe(true);
-    expect(c.isCampaignActive(BRT("2026-11-14T00:00:00"))).toBe(false);
+    expect(c.getActiveCampaign(BRT("2026-11-13T23:59:59"))?.id).toBe("black-friday-spinning-2026");
+    expect(c.getActiveCampaign(BRT("2026-11-14T00:00:00"))?.id).not.toBe("black-friday-spinning-2026");
   });
 
   it("4 aulas de R$ 29,90 saem por R$ 99,00", () => {
@@ -87,17 +87,54 @@ describe.each([
   });
 });
 
+describe.each([
+  ["site", site],
+  ["servidor", server],
+] as const)("Novos Planos Spinning — %s", (_label, c) => {
+  const AFTER = BRT("2026-11-20T12:00:00");
+  const price = (n: number, now = AFTER) => c.computeOrderPrice(Array(n).fill(2990), now);
+
+  it("começa exatamente à meia-noite de 14/11 e não tem data de término", () => {
+    expect(c.getActiveCampaign(BRT("2026-11-13T23:59:59"))?.id).toBe("black-friday-spinning-2026");
+    expect(c.getActiveCampaign(BRT("2026-11-14T00:00:00"))?.id).toBe("novos-planos-spinning-2026");
+    expect(c.getActiveCampaign(BRT("2027-06-01T12:00:00"))?.id).toBe("novos-planos-spinning-2026");
+  });
+
+  it("3 aulas: 5% OFF (R$ 89,70 → R$ 85,22)", () => {
+    expect(price(3)).toMatchObject({ subtotalCents: 8970, discountCents: 448, totalCents: 8522, discountPercent: 5 });
+  });
+
+  it("5 aulas: 10% OFF (R$ 149,50 → R$ 134,55)", () => {
+    expect(price(5)).toMatchObject({ subtotalCents: 14950, discountCents: 1495, totalCents: 13455, discountPercent: 10 });
+  });
+
+  it("10 aulas: 15% OFF (R$ 299,00 → R$ 254,15)", () => {
+    expect(price(10)).toMatchObject({ subtotalCents: 29900, discountCents: 4485, totalCents: 25415, discountPercent: 15 });
+  });
+
+  it("o desconto acompanha o preço da aula", () => {
+    expect(c.computeOrderPrice([3500, 3500, 3500], AFTER).totalCents).toBe(10500 - 525);
+  });
+
+  it.each([1, 2, 4, 6, 7, 8, 9])("%i aulas pagam preço cheio", (n) => {
+    expect(price(n)).toMatchObject({ discountCents: 0, totalCents: 2990 * n });
+  });
+
+  it("4 aulas não têm mais o preço da Black Friday", () => {
+    expect(price(4, BRT("2026-11-14T00:00:00")).totalCents).toBe(11960);
+  });
+});
+
 describe("textos da campanha no site", () => {
   const DURING = BRT("2026-11-10T12:00:00");
 
-  it("fases: em breve → ativa → encerrada", () => {
-    expect(site.getCampaignPhase(BRT("2026-11-08T20:00:00"))).toBe("upcoming");
-    expect(site.getCampaignPhase(DURING)).toBe("active");
-    expect(site.getCampaignPhase(BRT("2026-11-14T00:00:00"))).toBe("ended");
+  it("antes de 09/11 às 5h não há campanha", () => {
+    expect(site.getActiveCampaign(BRT("2026-11-08T20:00:00"))).toBeNull();
+    expect(site.getActiveCampaign(DURING)?.name).toBe("Black Friday");
   });
 
   it("período exibido: 09/11 às 5h até 13/11", () => {
-    const p = site.campaignPeriod();
+    const p = site.campaignPeriod(site.CAMPAIGNS[0]);
     expect(p).toMatchObject({ start: "09/11", startTime: "5h", end: "13/11" });
     expect(p.startWeekday).toBe("segunda-feira");
   });
@@ -111,19 +148,35 @@ describe("textos da campanha no site", () => {
   });
 
   it("contagem regressiva", () => {
-    expect(site.timeLeftLabel(BRT("2026-11-09T05:00:00"))).toBe("4 dias e 19h");
-    expect(site.timeLeftLabel(BRT("2026-11-13T21:40:00"))).toBe("2h 20min");
-    expect(site.timeLeftLabel(BRT("2026-11-14T00:00:00"))).toBe("");
+    const bf = site.CAMPAIGNS[0];
+    expect(site.timeLeftLabel(bf, BRT("2026-11-09T05:00:00"))).toBe("4 dias e 19h");
+    expect(site.timeLeftLabel(bf, BRT("2026-11-13T21:40:00"))).toBe("2h 20min");
+    expect(site.timeLeftLabel(bf, BRT("2026-11-14T00:00:00"))).toBe("");
+  });
+
+  it("Novos Planos: dicas do carrinho e cor amarela", () => {
+    const AFTER = BRT("2026-11-20T12:00:00");
+    expect(site.campaignCartHint(1, AFTER)).toBe("Adicione 2 aulas e leve 3 aulas com 5% OFF");
+    expect(site.campaignCartHint(3, AFTER)).toBeNull();
+    expect(site.campaignCartHint(4, AFTER)).toBe("Adicione 1 aula e leve 5 aulas com 10% OFF");
+    expect(site.campaignCartHint(7, AFTER)).toBe("Adicione 3 aulas e leve 10 aulas com 15% OFF");
+    expect(site.campaignOffersText(site.getActiveCampaign(AFTER)!)).toBe(
+      "3 aulas com 5% OFF, 5 aulas com 10% OFF ou 10 aulas com 15% OFF",
+    );
+    expect(site.getActiveCampaign(AFTER)?.theme).toBe("yellow");
+    expect(site.getActiveCampaign(BRT("2026-11-10T12:00:00"))?.theme).toBe("pink");
   });
 });
 
 describe("descrição da cobrança (Asaas)", () => {
   it("leva o nome da promoção e respeita 150 caracteres", () => {
-    const tier = server.CAMPAIGN.tiers[0];
-    expect(server.tierLabel(tier)).toBe("Black Friday 4 aulas R$ 99,00");
+    const bf = server.CAMPAIGNS[0];
+    const tier = bf.tiers[0];
+    expect(server.tierLabel(server.CAMPAIGNS[1].tiers[1], server.CAMPAIGNS[1])).toBe("Novos Planos Spinning 5 aulas 10% OFF");
+    expect(server.tierLabel(tier, bf)).toBe("Black Friday 4 aulas R$ 99,00");
     const d = server.buildChargeDescription(
       ["10/11 18:15", "11/11 18:15", "12/11 20:15", "13/11 19:15"],
-      { customerName: "Maria Aparecida dos Santos Oliveira", itemsCount: 4, promoLabel: server.tierLabel(tier) },
+      { customerName: "Maria Aparecida dos Santos Oliveira", itemsCount: 4, promoLabel: server.tierLabel(tier, bf) },
     );
     expect(d).toContain("Black Friday 4 aulas R$ 99,00");
     expect(d.length).toBeLessThanOrEqual(150);

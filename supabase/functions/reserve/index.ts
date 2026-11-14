@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   AGENCY_FEE_CENTS_PER_ITEM,
-  CAMPAIGN,
+  getActiveCampaign,
   DEFAULT_PRICE_CENTS,
   MAX_ITEMS_PER_ORDER,
   ORDER_TTL_MINUTES,
@@ -148,12 +148,14 @@ Deno.serve(async (req) => {
     // única transação. Qualquer horário indisponível => nada é criado.
     // A promoção é decidida aqui, no instante do pedido (horário do servidor),
     // e o preço travado no pedido vale até o fim da janela de pagamento.
-    const tier = getCampaignTier(items.length);
+    const orderNow = new Date();
+    const campaign = getActiveCampaign(orderNow);
+    const tier = getCampaignTier(items.length, orderNow);
 
     const { data: orderData, error: orderError } = await supabase.rpc("create_booking_order", {
       p_user_id: userId,
       p_items: items.map((it) => ({ class_id: it.class_id, class_date: it.class_date })),
-      p_campaign_id: CAMPAIGN.id,
+      p_campaign_id: campaign?.id ?? null,
       p_discount_percent: tier?.totalCents == null ? (tier?.percent ?? 0) : 0,
       p_ttl_minutes: ORDER_TTL_MINUTES,
       p_default_price: DEFAULT_PRICE_CENTS,
@@ -204,7 +206,7 @@ Deno.serve(async (req) => {
     const chargeDescription = buildChargeDescription(schedule, {
       customerName: normalizedName,
       itemsCount: order.items_count,
-      promoLabel: tier && order.discount_cents > 0 ? tierLabel(tier) : undefined,
+      promoLabel: tier && campaign && order.discount_cents > 0 ? tierLabel(tier, campaign) : undefined,
     });
 
     // ===== Cobrança Asaas =====

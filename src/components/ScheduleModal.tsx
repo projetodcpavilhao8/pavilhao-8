@@ -10,12 +10,12 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_PRICE_CENTS as REGULAR_PRICE_CENTS,
   MAX_ITEMS_PER_ORDER,
-  CAMPAIGN,
+  campaignOffersText,
   campaignPeriod,
   campaignCartHint,
   computeOrderPrice,
+  getActiveCampaign,
   getCampaignTier,
-  isCampaignActive,
   tierOfferText,
 } from "@/config/campaign";
 
@@ -187,9 +187,10 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
   const cartHint = useMemo(() => campaignCartHint(cart.length), [cart.length]);
   // Reavalia a cada abertura (o modal pode ficar montado de antes do início).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const campaignOn = useMemo(() => isCampaignActive(), [open]);
+  const campaign = useMemo(() => getActiveCampaign(), [open]);
+  const campaignEnd = campaign ? campaignPeriod(campaign).end : "";
   const appliedTier = priceBreakdown.discountCents > 0 ? getCampaignTier(priceBreakdown.itemsCount) : null;
-  const promoText = appliedTier ? `${CAMPAIGN.name}: ${tierOfferText(appliedTier)}` : "";
+  const promoText = appliedTier && campaign ? `${campaign.name}: ${tierOfferText(appliedTier)}` : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,13 +283,16 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
 
 
         {/* Chamada discreta da campanha */}
-        {campaignOn && step === 1 && (
+        {campaign && step === 1 && (
           <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/40 shadow-neon-sm">
             <Tag className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
             <div className="text-[11px] leading-snug">
-              <p className="font-bold text-primary uppercase tracking-wide">{CAMPAIGN.name} Spinning P8</p>
+              <p className="font-bold text-primary uppercase tracking-wide">
+                {campaign.name.includes("Spinning") ? campaign.name : `${campaign.name} Spinning P8`}
+              </p>
               <p className="text-muted-foreground">
-                Escolha {CAMPAIGN.tiers.map((t) => tierOfferText(t)).join(" ou ")}. Válido para compras até {campaignPeriod().end}.
+                Escolha {campaignOffersText(campaign)}.
+                {campaignEnd && ` Válido para compras até ${campaignEnd}.`}
               </p>
             </div>
           </div>
@@ -469,7 +473,7 @@ const ScheduleModal = ({ open, onOpenChange, initialModality }: ScheduleModalPro
                 </div>
                 {priceBreakdown.discountCents > 0 && (
                   <div className="flex justify-between text-xs text-primary">
-                    <span>Desconto {CAMPAIGN.name}</span>
+                    <span>Desconto {campaign?.name ?? "promocional"}</span>
                     <span>− {formatBRL(priceBreakdown.discountCents)}</span>
                   </div>
                 )}
